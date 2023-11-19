@@ -59,12 +59,10 @@ func (s *APIServer) handleGetAccount(w http.ResponseWriter, r *http.Request) err
 }
 
 func (s *APIServer) handleGetAccountById(w http.ResponseWriter, r *http.Request) error {
-	idStr := mux.Vars(r)["id"]
+	id, err := GetID(r)
 
-	id, strErr := strconv.Atoi(idStr)
-
-	if strErr != nil {
-		return fmt.Errorf("Invalid id given %s", idStr)
+	if err != nil {
+		return err
 	}
 
 	account, err := s.store.GetAccountByID(id)
@@ -92,13 +90,22 @@ func (s *APIServer) handleCreateAccount(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *APIServer) handleDeleteAccount(w http.ResponseWriter, r *http.Request) error {
-	err := s.store.DeleteAccount(2)
+
+	query := r.URL.Query()
+	idStr := query.Get("id")
+	id, err := strconv.Atoi(idStr)
 
 	if err != nil {
-		return err
+		return fmt.Errorf("Invalid query string param %s", idStr)
 	}
 
-	return WriteJSON(w, http.StatusOK, "DONE")
+	accErr := s.store.DeleteAccount(id)
+
+	if accErr != nil {
+		return accErr
+	}
+
+	return WriteJSON(w, http.StatusOK, map[string]int{"deleted": id})
 }
 
 func (s *APIServer) handleTransfer(w http.ResponseWriter, r *http.Request) error {
@@ -124,4 +131,15 @@ func makeHTTPHandleFunc(f apiFunc) http.HandlerFunc {
 			return
 		}
 	}
+}
+
+func GetID(r *http.Request) (int, error) {
+	idStr := mux.Vars(r)["id"]
+	id, strErr := strconv.Atoi(idStr)
+
+	if strErr != nil {
+		return id, fmt.Errorf("Invalid id given %s", idStr)
+	}
+
+	return id, nil
 }
