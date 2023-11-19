@@ -27,7 +27,7 @@ func (s *APIServer) Run() {
 	router := mux.NewRouter()
 
 	router.HandleFunc("/account", makeHTTPHandleFunc(s.handleAccount))
-	router.HandleFunc("/account/{id}", withJWTAuth(makeHTTPHandleFunc(s.handleGetAccountById)))
+	router.HandleFunc("/account/{id}", withJWTAuth(makeHTTPHandleFunc(s.handleGetAccountById), s.store))
 	router.HandleFunc("/transfer", makeHTTPHandleFunc(s.handleTransfer))
 
 	log.Println("Listing on port: ", s.listenAddr)
@@ -148,20 +148,56 @@ func createJWT(account *Account) (string, error) {
 	return token.SignedString([]byte(secret))
 }
 
-func withJWTAuth(handlerFunc http.HandlerFunc) http.HandlerFunc {
+func permissionDenied(w http.ResponseWriter) {
+	WriteJSON(w, http.StatusForbidden, ApiError{Error: "permission denied"})
+}
+
+func withJWTAuth(handlerFunc http.HandlerFunc, s Storage) http.HandlerFunc {
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("Calling JWT auth middleware")
 
 		tokenString := r.Header.Get("x-jwt-token")
 
-		_, err := validateJWT(tokenString)
+		token, err := validateJWT(tokenString)
 
 		if err != nil {
-
-			WriteJSON(w, http.StatusForbidden, ApiError{Error: "Invalid token"})
+			permissionDenied(w)
 			return
 		}
+
+		if !token.Valid {
+			permissionDenied(w)
+			return
+		}
+
+		claims := token.Claims.(jwt.MapClaims)
+		claimsAccountNumber := int64(claims["accountNumber"].(float64))
+
+		id, err := GetID(r)
+
+		if err != nil {
+			WriteJSON(w, http.StatusForbidden, ApiError{Error: err.Error()})
+			return
+		}
+
+		account, err := s.GetAccountByID(id)
+
+		if err != nil {
+			WriteJSON(w, http.StatusForbidden, ApiError{Error: err.Error()})
+			return
+		}
+
+		fmt.Println(account.Number)
+
+		if account.Number != claimsAccountNumber {
+			permissionDenied(w)
+			return
+		}
+
+		fmt.Println(claims)
+		fmt.Println(claimsAccountNumber)
+		fmt.Println(account)
 
 		handlerFunc(w, r)
 	}
