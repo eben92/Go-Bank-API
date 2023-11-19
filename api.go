@@ -26,6 +26,7 @@ func NewAPIServer(listenAddr string, store Storage) *APIServer {
 func (s *APIServer) Run() {
 	router := mux.NewRouter()
 
+	router.HandleFunc("/login", makeHTTPHandleFunc(s.handleLogin))
 	router.HandleFunc("/account", makeHTTPHandleFunc(s.handleAccount))
 	router.HandleFunc("/account/{id}", withJWTAuth(makeHTTPHandleFunc(s.handleGetAccountById), s.store))
 	router.HandleFunc("/transfer", makeHTTPHandleFunc(s.handleTransfer))
@@ -83,18 +84,23 @@ func (s *APIServer) handleCreateAccount(w http.ResponseWriter, r *http.Request) 
 		return err
 	}
 
-	account := NewAccount(accRequest.FirstName, accRequest.LastName)
+	account, err := NewAccount(accRequest.FirstName, accRequest.LastName, accRequest.Password)
+
+	if err != nil {
+		return err
+	}
+
 	if err := s.store.CreateAccount(account); err != nil {
 		return err
 	}
 
-	tokenString, err := createJWT(account)
-	if err != nil {
-		fmt.Println("JWT1", tokenString)
-		return err
-	}
+	// tokenString, err := createJWT(account)
+	// if err != nil {
+	// 	fmt.Println("JWT1", tokenString)
+	// 	return err
+	// }
 
-	fmt.Println("JWT", tokenString)
+	// fmt.Println("JWT", tokenString)
 
 	return WriteJSON(w, http.StatusCreated, account)
 }
@@ -213,6 +219,23 @@ func validateJWT(tokenString string) (*jwt.Token, error) {
 
 		return []byte(secret), nil
 	})
+
+}
+
+func (s *APIServer) handleLogin(w http.ResponseWriter, r *http.Request) error {
+
+	if r.Method != "POST" {
+		// permissionDenied(w)
+		return fmt.Errorf("method not allowed %s", r.Method)
+	}
+
+	var req LoginRequest
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return err
+	}
+
+	return WriteJSON(w, http.StatusOK, req)
 
 }
 
