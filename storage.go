@@ -14,6 +14,7 @@ type Storage interface {
 	GetAccounts() ([]*Account, error)
 	GetAccountByID(int) (*Account, error)
 	GetAccountByNumber(int) (*Account, error)
+	DropDB() error
 }
 
 type PostgresStore struct {
@@ -40,17 +41,16 @@ func NewPostgresStore() (*PostgresStore, error) {
 
 func (s *PostgresStore) CreateAccount(acc *Account) error {
 	query := `INSERT INTO account 
-	(first_name, last_name, number, balance, created_at)
+	(first_name, last_name, number, password, balance, created_at)
 	values
-	($1, $2, $3, $4, $5)`
+	($1, $2, $3, $4, $5, $6)`
 
-	res, err := s.db.Query(query, acc.FirstName, acc.LastName, acc.Number, acc.Balance, acc.CreatedAt)
+	_, err := s.db.Query(query, acc.FirstName, acc.LastName, acc.Number, acc.Password, acc.Balance, acc.CreatedAt)
 
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("%+v\n", res)
 	return nil
 }
 
@@ -72,6 +72,17 @@ func (s *PostgresStore) DeleteAccount(id int) error {
 	if qError != nil {
 		return fmt.Errorf("account with id %d not found", id)
 	}
+
+	return nil
+}
+
+func (s *PostgresStore) DropDB() error {
+	_, err := s.db.Query("DROP TABLE account")
+	if err != nil {
+		return fmt.Errorf("account with id not found")
+	}
+
+	fmt.Println("table dropped")
 
 	return nil
 }
@@ -139,6 +150,7 @@ func (s *PostgresStore) createAccountTable() error {
 		first_name varchar(50),
 		last_name varchar(50),
 		number serial,
+		password varchar(100),
 		balance serial,
 		created_at timestamp
 	)`
@@ -156,6 +168,7 @@ func scanIntoAccount(rows *sql.Rows) (*Account, error) {
 		&account.FirstName,
 		&account.LastName,
 		&account.Number,
+		&account.Password,
 		&account.Balance,
 		&account.CreatedAt)
 

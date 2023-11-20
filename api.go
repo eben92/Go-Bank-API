@@ -235,7 +235,35 @@ func (s *APIServer) handleLogin(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	return WriteJSON(w, http.StatusOK, req)
+	acc, err := s.store.GetAccountByNumber(int(req.Number))
+
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("%+v\n", acc)
+
+	token, err := createJWT(acc)
+
+	if err != nil {
+		return err
+	}
+
+	if !acc.ValidatePassword(req.Password) {
+		return fmt.Errorf("not authenticated")
+
+	}
+
+	res := LoginResponse{
+		Token:     token,
+		Number:    acc.Number,
+		FirstName: acc.FirstName,
+		LastName:  acc.LastName,
+		ID:        acc.ID,
+		Balance:   acc.Balance,
+	}
+
+	return WriteJSON(w, http.StatusOK, res)
 
 }
 
